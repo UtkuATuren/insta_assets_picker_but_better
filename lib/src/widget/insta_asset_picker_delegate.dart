@@ -113,7 +113,7 @@ class InstaAssetPickerBuilder extends DefaultAssetPickerBuilderDelegate {
   /// Called when the confirmation [TextButton] is tapped
   void onConfirm(BuildContext context) {
     if (closeOnComplete) {
-      InstaAssetsCropSingleton.cropParameters = [];
+      InstaAssetsCropSingleton.cropParameters.clear();
       Navigator.of(context).pop(provider.selectedAssets);
     }
     _cropViewerKey.currentState?.saveCurrentCropChanges();

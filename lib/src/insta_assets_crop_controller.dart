@@ -11,7 +11,7 @@ import 'package:insta_assets_picker/insta_assets_picker.dart';
 class InstaAssetsCropSingleton {
   const InstaAssetsCropSingleton._();
 
-  static List<InstaAssetsCropData> cropParameters = [];
+  static final Map<String, InstaAssetsCropData> cropParameters = {};
 }
 
 class InstaAssetsExportData {
@@ -118,7 +118,7 @@ class InstaAssetsCropController {
   final InstaAssetCropDelegate cropDelegate;
 
   /// List of all the crop parameters set by the user
-  List<InstaAssetsCropData> _cropParameters = [];
+  Map<String, InstaAssetsCropData> _cropParameters = {};
 
   /// Whether if [_cropParameters] should be saved in the cache to use when the picker
   /// is open with [InstaAssetPicker.restorableAssetsPicker]
@@ -151,21 +151,23 @@ class InstaAssetsCropController {
   }
 
   /// Use [_cropParameters] when [keepMemory] is `false`, otherwise use [InstaAssetsCropSingleton.cropParameters]
-  List<InstaAssetsCropData> get cropParameters => keepMemory ? InstaAssetsCropSingleton.cropParameters : _cropParameters;
+  Map<String, InstaAssetsCropData> get cropParameters => keepMemory ? InstaAssetsCropSingleton.cropParameters : _cropParameters;
 
   /// Save the list of crop parameters
   /// if [keepMemory] save list memory or simply in the controller
-  void updateStoreCropParam(List<InstaAssetsCropData> list) {
+  void updateStoreCropParam(Map<String, InstaAssetsCropData> map) {
     if (keepMemory) {
-      InstaAssetsCropSingleton.cropParameters = list;
+      InstaAssetsCropSingleton.cropParameters
+        ..clear()
+        ..addAll(map);
     } else {
-      _cropParameters = list;
+      _cropParameters = map;
     }
   }
 
   /// Clear all the saved crop parameters
   void clear() {
-    updateStoreCropParam([]);
+    updateStoreCropParam({});
     previewAsset.value = null;
   }
 
@@ -175,39 +177,25 @@ class InstaAssetsCropController {
     CropState? saveCropState,
     List<AssetEntity> selectedAssets,
   ) {
-    final List<InstaAssetsCropData> newList = [];
+    final Map<String, InstaAssetsCropData> newMap = {};
 
     for (final asset in selectedAssets) {
-      // get the already saved crop parameters if exists
-      final savedCropAsset = get(asset);
-
-      // if it is the asseet to save & the crop parameters exists
       if (asset == saveAsset && saveAsset != null) {
-        // add the new parameters
-        newList.add(InstaAssetsCropData.fromState(
-          asset: saveAsset,
+        newMap[asset.id] = InstaAssetsCropData.fromState(
+          asset: asset,
           cropState: saveCropState,
-        ));
-        // if it is not the asset to save and no crop parameter exists
-      } else if (savedCropAsset == null) {
-        // set empty crop parameters
-        newList.add(InstaAssetsCropData.fromState(asset: asset, cropState: null));
+        );
       } else {
-        // keep existing crop parameters
-        newList.add(savedCropAsset);
+        final saved = get(asset);
+        newMap[asset.id] = saved ?? InstaAssetsCropData.fromState(asset: asset, cropState: null);
       }
     }
-
-    // overwrite the crop parameters list
-    updateStoreCropParam(newList);
+    updateStoreCropParam(newMap);
   }
 
   /// Returns the crop parametes [InstaAssetsCropData] of the given asset
   InstaAssetsCropData? get(AssetEntity asset) {
-    if (cropParameters.isEmpty) return null;
-    final index = cropParameters.indexWhere((e) => e.asset == asset);
-    if (index == -1) return null;
-    return cropParameters[index];
+    return cropParameters[asset.id];
   }
 
   /// Apply all the crop parameters to the list of [selectedAssets]
@@ -228,20 +216,20 @@ class InstaAssetsCropController {
 
     // start progress
     yield makeDetail(0);
-    final List<InstaAssetsCropData> list = cropParameters;
+    final Map<String, InstaAssetsCropData> map = cropParameters;
+    final step = 1 / selectedAssets.length;
 
-    final step = 1 / list.length;
-
-    for (int i = 0; i < list.length; i++) {
-      final asset = list[i].asset;
+    for (int i = 0; i < selectedAssets.length; i++) {
+      final asset = selectedAssets[i];
+      final cropData = map[asset.id] ?? InstaAssetsCropData.fromState(asset: asset, cropState: null);
 
       if (skipCrop || asset.type != AssetType.image) {
-        data.add(InstaAssetsExportData(croppedFile: null, selectedData: list[i]));
+        data.add(InstaAssetsExportData(croppedFile: null, selectedData: cropData));
       } else {
         final file = await asset.originFile;
 
-        final scale = list[i].scale;
-        final area = list[i].area;
+        final scale = cropData.scale;
+        final area = cropData.area;
 
         if (file == null) {
           throw 'error file is null';
@@ -254,14 +242,14 @@ class InstaAssetsCropController {
         );
 
         if (area == null) {
-          data.add(InstaAssetsExportData(croppedFile: sampledFile, selectedData: list[i]));
+          data.add(InstaAssetsExportData(croppedFile: sampledFile, selectedData: cropData));
         } else {
           // crop the file with the area selected
           final croppedFile = await InstaAssetsCrop.cropImage(file: sampledFile, area: area);
           // delete the not needed sample file
           sampledFile.delete();
 
-          data.add(InstaAssetsExportData(croppedFile: croppedFile, selectedData: list[i]));
+          data.add(InstaAssetsExportData(croppedFile: croppedFile, selectedData: cropData));
         }
       }
 
